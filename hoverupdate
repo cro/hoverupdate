@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+import sys
+import requests
+import argparse
+import re
+import os
+
+class HoverException(Exception):
+    pass
+
+
+class HoverRecordNotFoundException(HoverException):
+    pass
+
+
+class HoverAPI(object):
+    def __init__(self, username, password):
+        params = {"username": username, "password": password}
+        r = requests.post("https://www.hover.com/api/login", params=params)
+        if not r.ok or "hoverauth" not in r.cookies:
+            raise HoverException(r)
+        self.cookies = {"hoverauth": r.cookies["hoverauth"]}
+    def call(self, method, resource, data=None):
+        url = "https://www.hover.com/api/{0}".format(resource)
+        r = requests.request(method, url, data=data, cookies=self.cookies)
+        if not r.ok:
+            raise HoverException(r)
+        if r.content:
+            body = r.json()
+            if "succeeded" not in body or body["succeeded"] is not True:
+                raise HoverException(body)
+            return body
+
+class Usage(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+
+def find_domainid(client, tld):
+    records = client.call("get", "domains")
+    for r in records['domains']:
+        if r['domain_name'] == tld:
+            return r['id']
+
+    raise HoverRecordNotFoundException('No tld found for {0}'.format(tld))
+
+
+def find_dnsrecord(client, hostname, tld, rectype):
+    id = find_domainid(client, tld)
+    records = client.call('get', 'domains/{0}/dns'.format(id))
+    for r in records['domains']:
+        for e in r['entries']:
+            if e['name'] == hostname and e['type'] == rectype:
+                return e['id']
+
+    raise HoverRecordNotFoundException('No DNS entry type {0} found for host {1}'.format(rectype, hostname))
+
+
+def update_record(client, hostname, tld, rectype, content, ttl=None):
+    id = find_dnsrecord(client, hostname, tld, rectype)
+    rec = {'content': content}
+    if ttl:
+        rec['ttl'] = ttl
+    client.call('put','dns/{0}'.format(id), rec)
+
+
+def create_record(client, hostname, tld, rectype, content, ttl=None):
+    id = find_domainid(client, tld)
+    rec = {'name': hostname, 'type': rectype, 'content': content}
+    if ttl:
+        rec['ttl'] = ttl
+    client.call('post','domains/{0}/dns'.format(id), rec)
+
+
+def delete_record(client, hostname, tld, rectype):
+    id = find_dnsrecord(client, hostname, tld, rectype)
+    client.call('delete','dns/{0}'.format(id))
+
+
+def main():
+    
+    parser = argparse.ArgumentParser(description='Update DNS entries using Hover.com\'s undocumented API')
+    parser.add_argument('domain', nargs=1, type=str, help='Domain name (FQDN) for which DNS update should be made')
+    parser.add_argument('record_type', nargs='?', type=str, help='DNS record type')
+    parser.add_argument('content', nargs='?', type=str, help='DNS record content')
+    parser.add_argument('--delete', action='store_true', dest='delete_record', help='Delete this record')
+    parser.add_argument('--ttl', nargs='?', dest='ttl', help='Time to live in seconds')
+    parser.add_argument('--username', nargs=1, dest='username', type=str, help='Hover.com username')
+    parser.add_argument('--password', nargs=1, dest='password', type=str, help='Hover.com password')
+
+    args = parser.parse_args()
+
+    if args.domain[0].count('.') < 2:
+        tld = args.domain[0]
+        host = ''
+    else:
+        domainsplit = re.match('(.*)\.(.*\..*)', args.domain[0])
+        tld = domainsplit.group(2)
+        host = domainsplit.group(1)
+
+    if not (hasattr(args, 'username') or hasattr(args, 'password')):
+        if 'HOVER_USERNAME' in os.environ and 'HOVER_PASSWORD' in os.environ:
+            username = os.environ['HOVER_USERNAME']
+            password = os.environ['HOVER_PASSWORD']
+    else:
+        username = args.username
+        password = args.password
+
+    if not args.delete_record and (args.content is None or args.record_type is None):
+        raise HoverException('Need to indicate what content will be stored in the DNS entry')
+
+    client = HoverAPI(username, password)
+
+    if args.delete_record:
+        delete_record(client, host, tld, args.record_type)
+    else:
+        try:
+            update_record(client, host, tld, args.record_type, args.content, ttl=args.ttl)
+        except HoverRecordNotFoundException:
+            create_record(client, host, tld, args.record_type, args.content, ttl=args.ttl)
+        
+
+if __name__ == "__main__":
+    sys.exit(main())
