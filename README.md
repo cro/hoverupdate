@@ -14,13 +14,13 @@ Usage is simple:
 
 E.g.
 
-hoverupdate long.dns.entry.example.com A "10.1.44.45"
+`hoverupdate long.dns.entry.example.com A "10.1.44.45"`
 
-hoverupdate my.spam.mailserver.example.com MX "10 alt1.aspmx.google.com."
+`hoverupdate my.spam.mailserver.example.com MX "10 alt1.aspmx.google.com."`
 
-hoverupdate outdated.dnsentry.example.com A --delete
+`hoverupdate outdated.dnsentry.example.com A --delete`
 
-hoverupdate point.to.other.example.com CNAME "original.example.com" --ttl 120
+`hoverupdate point.to.other.example.com CNAME "original.example.com" --ttl 120`
 
 
 Optional argument: `--ttl <seconds>`  If `--ttl` is omitted then Hover's default is used.
@@ -28,7 +28,7 @@ Optional argument: `--ttl <seconds>`  If `--ttl` is omitted then Hover's default
 The script will determine if that record type already exists and update the record, or create
 one if it is not already present.
 
-Authentication can be passed on the command line (`--username` and `--password`)or via the `HOVER_USERNAME` and `HOVER_PASSWORD`
+Authentication can be passed on the command line (`--username` and `--password`) or via the `HOVER_USERNAME` and `HOVER_PASSWORD`
 environment variables.
 
 
