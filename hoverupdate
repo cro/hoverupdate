@@ -102,6 +102,8 @@ def main():
         if 'HOVER_USERNAME' in os.environ and 'HOVER_PASSWORD' in os.environ:
             username = os.environ['HOVER_USERNAME']
             password = os.environ['HOVER_PASSWORD']
+        else:
+            raise HoverException('No authentication passed on command line or in environment.')
     else:
         username = args.username
         password = args.password
@@ -121,4 +123,8 @@ def main():
         
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        rc = main()
+    except HoverException as e:
+        print (e.message, file=sys.stderr)
+    sys.exit(rc)
