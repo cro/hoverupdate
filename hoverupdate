@@ -4,6 +4,8 @@ import requests
 import argparse
 import re
 import os
+import os.path
+import pyotp
 
 class HoverException(Exception):
     pass
@@ -18,18 +20,29 @@ class HoverAPI(object):
         params = {"username": username, "password": password}
         r = requests.post("https://www.hover.com/api/login", params=params)
         if not r.ok or "hoverauth" not in r.cookies:
-            raise HoverException(r)
+            raise HoverException(_error_format(r))
         self.cookies = {"hoverauth": r.cookies["hoverauth"]}
     def call(self, method, resource, data=None):
         url = "https://www.hover.com/api/{0}".format(resource)
         r = requests.request(method, url, data=data, cookies=self.cookies)
         if not r.ok:
-            raise HoverException(r)
+            raise HoverException(_error_format(r))
         if r.content:
             body = r.json()
             if "succeeded" not in body or body["succeeded"] is not True:
                 raise HoverException(body)
             return body
+
+    def _error_format(r):
+        error_details = r.json()
+        error_str = u''
+        if 'error_code' in error_details:
+            error_str = error_details['error_code']
+        if 'error' in error_details:
+            error_str = error_str + ': ' + error_details['error']
+        error_str = error_str.lstrip(': ')
+        if error_str = '':
+            error_str = str(r)
 
 class Usage(Exception):
     def __init__(self, msg):
@@ -87,7 +100,7 @@ def main():
     parser.add_argument('--ttl', nargs='?', dest='ttl', help='Time to live in seconds')
     parser.add_argument('--username', nargs=1, dest='username', type=str, help='Hover.com username')
     parser.add_argument('--password', nargs=1, dest='password', type=str, help='Hover.com password')
-
+    parser.add_argument('--config', nargs='?', dest='password', type=str, help='Location of config file with credentials (defaults to ~/.hoverupdate)')
     args = parser.parse_args()
 
     if args.domain[0].count('.') < 2:
@@ -103,6 +116,12 @@ def main():
             username = os.environ['HOVER_USERNAME']
             password = os.environ['HOVER_PASSWORD']
         else:
+            if args.config:
+                configfile = args.config[0]
+            else:
+                configfile = os.path.join(os.path.expanduser('~'), '.hoverupdate')
+            `k`
+            
             raise HoverException('No authentication passed on command line or in environment.')
     else:
         username = args.username
@@ -120,11 +139,13 @@ def main():
             update_record(client, host, tld, args.record_type, args.content, ttl=args.ttl)
         except HoverRecordNotFoundException:
             create_record(client, host, tld, args.record_type, args.content, ttl=args.ttl)
-        
+
+    return 0
 
 if __name__ == "__main__":
     try:
         rc = main()
+        sys.exit(rc)
     except HoverException as e:
-        print (e.message, file=sys.stderr)
-    sys.exit(rc)
+        print (e, file=sys.stderr)
+        sys.exit(1)
